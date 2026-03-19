@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Photoshop Web Avanzado</title>
+<style>
+  body { margin:0; font-family:Arial; background:#1e1e1e; color:white; display:flex; flex-direction:column; align-items:center; }
+  #toolbar { display:flex; flex-wrap:wrap; gap:10px; padding:10px; background:#2c2c2c; width:100%; }
+  canvas { border:1px solid #555; margin-top:10px; cursor:crosshair; background:#222; }
+  button,input,select{padding:5px;}
+</style>
+</head>
+<body>
+
+<h1>Editor Web Avanzado</h1>
+
+<div id="toolbar">
+  <input type="file" id="upload">
+  <button id="draw">Pincel</button>
+  <button id="text">Texto</button>
+  <button id="select">Seleccionar</button>
+  <button id="undo">Undo</button>
+  <button id="redo">Redo</button>
+  <input type="color" id="color" value="#ff0000">
+  <input type="number" id="brushSize" value="5" min="1" max="50">
+  <button id="merge">Combinar Capas</button>
+  <button id="save">Guardar</button>
+</div>
+
+<div style="position:relative;">
+  <canvas id="canvas" width="800" height="500"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// Sistema de capas y historial
+let layers = [];
+let history = [];
+let historyIndex = -1;
+
+let activeLayer = null;
+let drawing = false;
+let textMode = false;
+let selectMode = false;
+let startX, startY;
+
+// Crear una capa nueva
+function createLayer(width, height, type='image') {
+  const c = document.createElement('canvas');
+  c.width = width;
+  c.height = height;
+  const context = c.getContext('2d');
+  layers.push({canvas:c, ctx:context, type:type});
+  activeLayer = layers[layers.length-1];
+  return activeLayer;
+}
+
+// Redibujar todas las capas
+function redraw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  layers.forEach(l => {
+    ctx.drawImage(l.canvas, 0,0);
+  });
+}
+
+// Guardar estado en historial
+function saveHistory() {
+  history = history.slice(0, historyIndex+1);
+  const snapshot = layers.map(l => {
+    const copy = document.createElement('canvas');
+    copy.width = l.canvas.width;
+    copy.height = l.canvas.height;
+    copy.getContext('2d').drawImage(l.canvas,0,0);
+    return {canvas:copy, type:l.type};
+  });
+  history.push(snapshot);
+  historyIndex++;
+}
+
+// Undo / Redo
+document.getElementById('undo').addEventListener('click', () => {
+  if(historyIndex<=0) return;
+  historyIndex--;
+  layers = history[historyIndex].map(l=>{
+    const copy = document.createElement('canvas');
+    copy.width = l.canvas.width; copy.height=l.canvas.height;
+    copy.getContext('2d').drawImage(l.canvas,0,0);
+    return {canvas:copy,type:l.type};
+  });
+  activeLayer = layers[layers.length-1];
+  redraw();
+});
+
+document.getElementById('redo').addEventListener('click', () => {
+  if(historyIndex >= history.length-1) return;
+  historyIndex++;
+  layers = history[historyIndex].map(l=>{
+    const copy = document.createElement('canvas');
+    copy.width = l.canvas.width; copy.height=l.canvas.height;
+    copy.getContext('2d').drawImage(l.canvas,0,0);
+    return {canvas:copy,type:l.type};
+  });
+  activeLayer = layers[layers.length-1];
+  redraw();
+});
+
+// Cargar imagen
+document.getElementById('upload').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.src = reader.result;
+    img.onload = () => {
+      const layer = createLayer(img.width>800?800:img.width, img.height*(800/img.width));
+      layer.ctx.drawImage(img,0,0,layer.canvas.width,layer.canvas.height);
+      saveHistory();
+      redraw();
+    }
+  }
+  reader.readAsDataURL(file);
+});
+
+// Dibujo
+document.getElementById('draw').addEventListener('click', ()=>{
+  drawing=true; textMode=false; selectMode=false;
+});
+
+canvas.addEventListener('mousedown', e=>{
+  startX = e.offsetX;
+  startY = e.offsetY;
+  if(drawing && activeLayer) {
+    activeLayer.ctx.strokeStyle = document.getElementById('color').value;
+    activeLayer.ctx.lineWidth = document.getElementById('brushSize').value;
+    activeLayer.ctx.lineCap = 'round';
+    activeLayer.ctx.beginPath();
+    activeLayer.ctx.moveTo(startX,startY);
+  }
+});
+
+canvas.addEventListener('mousemove', e=>{
+  if(drawing && activeLayer && e.buttons==1) {
+    activeLayer.ctx.lineTo(e.offsetX,e.offsetY);
+    activeLayer.ctx.stroke();
+    redraw();
+  }
+});
+
+canvas.addEventListener('mouseup', e=>{
+  if(drawing && activeLayer) {
+    saveHistory();
+  }
+});
+
+// Texto
+document.getElementById('text').addEventListener('click', ()=>{textMode=true; drawing=false; selectMode=false;});
+canvas.addEventListener('click', e=>{
+  if(textMode && activeLayer) {
+    const txt = prompt("Introduce tu texto:");
+    activeLayer.ctx.fillStyle = document.getElementById('color').value;
+    activeLayer.ctx.font = "30px Arial";
+    activeLayer.ctx.fillText(txt,e.offsetX,e.offsetY);
+    saveHistory();
+    redraw();
+    textMode=false;
+  }
+});
+
+// Combinar capas
+document.getElementById('merge').addEventListener('click', ()=>{
+  if(layers.length<=1) return;
+  const base = layers[0];
+  for(let i=1;i<layers.length;i++){
+    base.ctx.drawImage(layers[i].canvas,0,0);
+  }
+  layers = [base];
+  activeLayer = base;
+  saveHistory();
+  redraw();
+});
+
+// Guardar imagen final
+document.getElementById('save').addEventListener('click', ()=>{
+  const link = document.createElement('a');
+  link.download = 'imagen_final.png';
+  link.href = layers[0].canvas.toDataURL();
+  link.click();
+});
+
+</script>
+
+</body>
+</html>
