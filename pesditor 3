@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Editor de Fotos Avanzado</title>
+<style>
+  body { 
+    margin: 0; font-family: Arial; background: #1e1e1e; color: white; display: flex; flex-direction: column; align-items: center; 
+  }
+  #toolbar { margin: 10px; display: flex; flex-wrap: wrap; gap: 10px; }
+  canvas { border: 2px solid #444; cursor: crosshair; }
+  input[type=range] { width: 100px; }
+</style>
+</head>
+<body>
+
+<h1>Editor de Fotos Avanzado</h1>
+<div id="toolbar">
+  <input type="file" id="upload">
+  <label>Brillo<input type="range" id="brightness" min="0" max="200" value="100"></label>
+  <label>Contraste<input type="range" id="contrast" min="0" max="200" value="100"></label>
+  <label>Saturación<input type="range" id="saturation" min="0" max="200" value="100"></label>
+  <select id="filters">
+    <option value="none">Filtro</option>
+    <option value="grayscale">Blanco y Negro</option>
+    <option value="sepia">Sepia</option>
+    <option value="invert">Invertido</option>
+  </select>
+  <button id="rotate">Rotar 90°</button>
+  <button id="draw">Dibujar</button>
+  <button id="text">Texto</button>
+  <input type="color" id="color" value="#ff0000">
+  <input type="number" id="brushSize" value="5" min="1" max="50">
+  <button id="crop">Recortar</button>
+  <button id="reset">Reset</button>
+  <button id="save">Guardar</button>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let img = new Image();
+let currentRotation = 0;
+let drawing = false;
+let drawingMode = false;
+let textMode = false;
+let cropMode = false;
+let startX, startY;
+
+// Ajuste de filtros
+function applyFilters() {
+  const brightness = document.getElementById('brightness').value;
+  const contrast = document.getElementById('contrast').value;
+  const saturation = document.getElementById('saturation').value;
+  const filter = document.getElementById('filters').value;
+  ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) ${filter !== 'none' ? filter+'(100%)' : ''}`;
+  redrawImage();
+}
+
+// Redibuja la imagen según filtros y rotación
+function redrawImage() {
+  ctx.save();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.translate(canvas.width/2, canvas.height/2);
+  ctx.rotate(currentRotation * Math.PI/180);
+  ctx.drawImage(img, -canvas.width/2, -canvas.height/2, canvas.width, canvas.height);
+  ctx.restore();
+}
+
+// Cargar imagen
+document.getElementById('upload').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    img.src = reader.result;
+  }
+  reader.readAsDataURL(file);
+});
+
+img.onload = () => {
+  canvas.width = img.width > 800 ? 800 : img.width;
+  canvas.height = img.height * (canvas.width / img.width);
+  currentRotation = 0;
+  applyFilters();
+}
+
+// Sliders y filtros
+document.getElementById('brightness').addEventListener('input', applyFilters);
+document.getElementById('contrast').addEventListener('input', applyFilters);
+document.getElementById('saturation').addEventListener('input', applyFilters);
+document.getElementById('filters').addEventListener('change', applyFilters);
+
+// Rotar
+document.getElementById('rotate').addEventListener('click', () => {
+  currentRotation += 90;
+  if(currentRotation >= 360) currentRotation = 0;
+  redrawImage();
+});
+
+// Reset
+document.getElementById('reset').addEventListener('click', () => {
+  currentRotation = 0;
+  document.getElementById('brightness').value = 100;
+  document.getElementById('contrast').value = 100;
+  document.getElementById('saturation').value = 100;
+  document.getElementById('filters').value = 'none';
+  drawingMode = false; textMode = false; cropMode = false;
+  applyFilters();
+});
+
+// Guardar imagen
+document.getElementById('save').addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = 'imagen_editada.png';
+  link.href = canvas.toDataURL();
+  link.click();
+});
+
+// Dibujar
+document.getElementById('draw').addEventListener('click', () => {
+  drawingMode = true; textMode = false; cropMode = false;
+});
+
+// Texto
+document.getElementById('text').addEventListener('click', () => {
+  textMode = true; drawingMode = false; cropMode = false;
+});
+
+// Recorte
+document.getElementById('crop').addEventListener('click', () => {
+  cropMode = true; drawingMode = false; textMode = false;
+});
+
+canvas.addEventListener('mousedown', e => {
+  startX = e.offsetX;
+  startY = e.offsetY;
+  if(drawingMode || textMode || cropMode) drawing = true;
+});
+
+canvas.addEventListener('mouseup', e => {
+  if(drawingMode) { drawing = false; }
+  if(textMode) {
+    const text = prompt("Introduce tu texto:");
+    ctx.fillStyle = document.getElementById('color').value;
+    ctx.font = "30px Arial";
+    ctx.fillText(text, e.offsetX, e.offsetY);
+    textMode = false;
+  }
+  if(cropMode) {
+    const width = e.offsetX - startX;
+    const height = e.offsetY - startY;
+    const imageData = ctx.getImageData(startX, startY, width, height);
+    canvas.width = width;
+    canvas.height = height;
+    ctx.putImageData(imageData, 0, 0);
+    cropMode = false;
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  if(drawing && drawingMode) {
+    ctx.strokeStyle = document.getElementById('color').value;
+    ctx.lineWidth = document.getElementById('brushSize').value;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(e.offsetX, e.offsetY);
+    ctx.stroke();
+    startX = e.offsetX;
+    startY = e.offsetY;
+  }
+});
+
+</script>
+</body>
+</html>
