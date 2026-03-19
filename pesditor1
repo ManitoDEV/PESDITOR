@@ -1,0 +1,42 @@
+from tkinter import *
+from tkinter import filedialog
+from PIL import Image, ImageTk, ImageEnhance
+
+# Funciones del editor
+def abrir_imagen():
+    global img, img_tk
+    ruta = filedialog.askopenfilename(filetypes=[("Imagenes", "*.jpg *.png *.jpeg")])
+    if ruta:
+        img = Image.open(ruta)
+        img_tk = ImageTk.PhotoImage(img)
+        label_imagen.config(image=img_tk)
+
+def aplicar_brillo(valor):
+    global img, img_tk
+    enhancer = ImageEnhance.Brightness(img)
+    img_brillo = enhancer.enhance(float(valor))
+    img_tk = ImageTk.PhotoImage(img_brillo)
+    label_imagen.config(image=img_tk)
+
+def aplicar_contraste(valor):
+    global img, img_tk
+    enhancer = ImageEnhance.Contrast(img)
+    img_contraste = enhancer.enhance(float(valor))
+    img_tk = ImageTk.PhotoImage(img_contraste)
+    label_imagen.config(image=img_tk)
+
+# Ventana principal
+root = Tk()
+root.title("Editor de Fotos Simple")
+
+# UI
+label_imagen = Label(root)
+label_imagen.pack()
+
+btn_abrir = Button(root, text="Abrir Imagen", command=abrir_imagen)
+btn_abrir.pack()
+
+Scale(root, from_=0.5, to=2.0, resolution=0.1, orient=HORIZONTAL, label="Brillo", command=aplicar_brillo).pack()
+Scale(root, from_=0.5, to=2.0, resolution=0.1, orient=HORIZONTAL, label="Contraste", command=aplicar_contraste).pack()
+
+root.mainloop()
