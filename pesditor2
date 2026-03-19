@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mini Photoshop Web</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #1e1e1e;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  #canvas-container {
+    border: 2px solid #444;
+    margin-bottom: 20px;
+  }
+  canvas {
+    background: #222;
+    max-width: 100%;
+  }
+  input, button, select {
+    margin: 5px;
+    padding: 5px;
+  }
+  .slider-container {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+</style>
+</head>
+<body>
+
+<h1>Mini Photoshop Web</h1>
+
+<input type="file" id="upload">
+<div class="slider-container">
+  <label>Brillo <input type="range" id="brightness" min="0" max="200" value="100"></label>
+  <label>Contraste <input type="range" id="contrast" min="0" max="200" value="100"></label>
+  <label>Saturación <input type="range" id="saturation" min="0" max="200" value="100"></label>
+</div>
+
+<select id="filters">
+  <option value="none">Filtros</option>
+  <option value="grayscale">Blanco y Negro</option>
+  <option value="sepia">Sepia</option>
+  <option value="invert">Invertido</option>
+</select>
+
+<button id="rotate">Rotar 90°</button>
+<button id="reset">Reset</button>
+<button id="save">Guardar Imagen</button>
+
+<div id="canvas-container">
+  <canvas id="canvas"></canvas>
+</div>
+
+<script>
+const upload = document.getElementById('upload');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let img = new Image();
+let currentRotation = 0;
+
+function applyFilters() {
+  const brightness = document.getElementById('brightness').value;
+  const contrast = document.getElementById('contrast').value;
+  const saturation = document.getElementById('saturation').value;
+  const filter = document.getElementById('filters').value;
+
+  ctx.filter = `
+    brightness(${brightness}%)
+    contrast(${contrast}%)
+    saturate(${saturation}%)
+    ${filter !== 'none' ? filter+'(100%)' : ''}
+  `;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+}
+
+upload.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    img.src = reader.result;
+  }
+  reader.readAsDataURL(file);
+});
+
+img.onload = () => {
+  canvas.width = img.width > 800 ? 800 : img.width;
+  canvas.height = img.height * (canvas.width / img.width);
+  currentRotation = 0;
+  applyFilters();
+}
+
+document.getElementById('brightness').addEventListener('input', applyFilters);
+document.getElementById('contrast').addEventListener('input', applyFilters);
+document.getElementById('saturation').addEventListener('input', applyFilters);
+document.getElementById('filters').addEventListener('change', applyFilters);
+
+document.getElementById('rotate').addEventListener('click', () => {
+  currentRotation += 90;
+  const tempCanvas = document.createElement('canvas');
+  const tempCtx = tempCanvas.getContext('2d');
+  if (currentRotation % 180 !== 0) {
+    tempCanvas.width = canvas.height;
+    tempCanvas.height = canvas.width;
+  } else {
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+  }
+  tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+  tempCtx.rotate((Math.PI / 180) * currentRotation);
+  tempCtx.drawImage(img, -canvas.width/2, -canvas.height/2, canvas.width, canvas.height);
+  canvas.width = tempCanvas.width;
+  canvas.height = tempCanvas.height;
+  ctx.drawImage(tempCanvas, 0, 0);
+});
+
+document.getElementById('reset').addEventListener('click', () => {
+  currentRotation = 0;
+  document.getElementById('brightness').value = 100;
+  document.getElementById('contrast').value = 100;
+  document.getElementById('saturation').value = 100;
+  document.getElementById('filters').value = 'none';
+  applyFilters();
+});
+
+document.getElementById('save').addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = 'imagen_editada.png';
+  link.href = canvas.toDataURL();
+  link.click();
+});
+</script>
+
+</body>
+</html>
