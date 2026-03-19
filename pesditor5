@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Editor Web Avanzado - Liquid Glass</title>
+<style>
+  body {
+    margin:0;
+    font-family:Arial;
+    background:#1e1e1e;
+    color:white;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  canvas {
+    border:1px solid #555;
+    margin-top:20px;
+    cursor:crosshair;
+    background:#222;
+  }
+  /* Liquid Glass Overlays */
+  .overlay {
+    position: absolute;
+    top:20px;
+    right:20px;
+    width:250px;
+    padding:20px;
+    background: rgba(255,255,255,0.1);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border-radius:15px;
+    border: 1px solid rgba(255,255,255,0.25);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    color:white;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+  .overlay h2 {
+    margin-top:0;
+    font-size:18px;
+    text-align:center;
+    font-weight:500;
+  }
+  .overlay button, .overlay input, .overlay select {
+    width:100%;
+    margin-top:10px;
+    padding:8px;
+    border:none;
+    border-radius:10px;
+    background: rgba(255,255,255,0.2);
+    color:white;
+    cursor:pointer;
+    font-weight:bold;
+    backdrop-filter: blur(5px);
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+  .overlay button:hover, .overlay input:hover, .overlay select:hover {
+    background: rgba(255,255,255,0.35);
+    transform: scale(1.05);
+  }
+</style>
+</head>
+<body>
+
+<h1>Editor Web Avanzado - Liquid Glass</h1>
+
+<!-- Canvas principal -->
+<canvas id="canvas" width="800" height="500"></canvas>
+
+<!-- Overlay de herramientas -->
+<div class="overlay" id="toolsOverlay">
+  <h2>Herramientas</h2>
+  <input type="file" id="upload">
+  <button id="draw">Pincel</button>
+  <button id="text">Texto</button>
+  <button id="select">Seleccionar</button>
+  <input type="color" id="color" value="#ff0000">
+  <input type="number" id="brushSize" value="5" min="1" max="50">
+  <label>Brillo<input type="range" id="brightness" min="0" max="200" value="100"></label>
+  <label>Contraste<input type="range" id="contrast" min="0" max="200" value="100"></label>
+  <label>Saturación<input type="range" id="saturation" min="0" max="200" value="100"></label>
+  <select id="filters">
+    <option value="none">Filtro</option>
+    <option value="grayscale">Blanco y Negro</option>
+    <option value="sepia">Sepia</option>
+    <option value="invert">Invertido</option>
+  </select>
+  <button id="undo">Undo</button>
+  <button id="redo">Redo</button>
+  <button id="merge">Combinar Capas</button>
+  <button id="save">Guardar</button>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// Sistema de capas
+let layers = [];
+let activeLayer = null;
+
+// Historial
+let history = [];
+let historyIndex = -1;
+
+// Modos
+let drawingMode = false;
+let textMode = false;
+let selectMode = false;
+let startX, startY;
+let drawing = false;
+
+// Crear una capa nueva
+function createLayer(width, height, type='image') {
+  const c = document.createElement('canvas');
+  c.width = width;
+  c.height = height;
+  const context = c.getContext('2d');
+  layers.push({canvas:c, ctx:context, type:type});
+  activeLayer = layers[layers.length-1];
+  return activeLayer;
+}
+
+// Redibujar todas las capas
+function redraw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  layers.forEach(l => {
+    ctx.drawImage(l.canvas,0,0);
+  });
+}
+
+// Guardar historial
+function saveHistory() {
+  history = history.slice(0, historyIndex+1);
+  const snapshot = layers.map(l => {
+    const copy = document.createElement('canvas');
+    copy.width = l.canvas.width;
+    copy.height = l.canvas.height;
+    copy.getContext('2d').drawImage(l.canvas,0,0);
+    return {canvas:copy, type:l.type};
+  });
+  history.push(snapshot);
+  historyIndex++;
+}
+
+// Undo/Redo
+document.getElementById('undo').addEventListener('click', ()=>{
+  if(historyIndex<=0) return;
+  historyIndex--;
+  restoreHistory();
+});
+document.getElementById('redo').addEventListener('click', ()=>{
+  if(historyIndex>=history.length-1) return;
+  historyIndex++;
+  restoreHistory();
+});
+function restoreHistory() {
+  layers = history[historyIndex].map(l=>{
+    const copy = document.createElement('canvas');
+    copy.width = l.canvas.width;
+    copy.height = l.canvas.height;
+    copy.getContext('2d').drawImage(l.canvas,0,0);
+    return {canvas:copy,type:l.type};
+  });
+  activeLayer = layers[layers.length-1];
+  redraw();
+}
+
+// Cargar imagen
+document.getElementById('upload').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const img = new Image();
+    img.src = reader.result;
+    img.onload = ()=>{
+      const w = img.width>800?800:img.width;
+      const h = img.height*(w/img.width);
+      const layer = createLayer(w,h);
+      layer.ctx.drawImage(img,0,0,w,h);
+      saveHistory();
+      redraw();
+    }
+  }
+  reader.readAsDataURL(file);
+});
+
+// Modos
+document.getElementById('draw').addEventListener('click', ()=>{drawingMode=true;textMode=false;selectMode=false;});
+document.getElementById('text').addEventListener('click', ()=>{drawingMode=false;textMode=true;selectMode=false;});
+document.getElementById('select').addEventListener('click', ()=>{drawingMode=false;textMode=false;selectMode=true;});
+
+// Dibujo
+canvas.addEventListener('mousedown', e=>{
+  startX = e.offsetX;
+  startY = e.offsetY;
+  if(drawingMode && activeLayer){
+    drawing = true;
+    activeLayer.ctx.strokeStyle = document.getElementById('color').value;
+    activeLayer.ctx.lineWidth = document.getElementById('brushSize').value;
+    activeLayer.ctx.lineCap = 'round';
+    activeLayer.ctx.beginPath();
+    activeLayer.ctx.moveTo(startX,startY);
+  }
+});
+canvas.addEventListener('mousemove', e=>{
+  if(drawing && activeLayer && e.buttons==1){
+    activeLayer.ctx.lineTo(e.offsetX,e.offsetY);
+    activeLayer.ctx.stroke();
+    redraw();
+  }
+});
+canvas.addEventListener('mouseup', e=>{
+  if(drawing && activeLayer){
+    drawing=false;
+    saveHistory();
+  }
+  if(textMode && activeLayer){
+    const txt = prompt("Introduce tu texto:");
+    if(txt){
+      activeLayer.ctx.fillStyle = document.getElementById('color').value;
+      activeLayer.ctx.font = "30px Arial";
+      activeLayer.ctx.fillText(txt,e.offsetX,e.offsetY);
+      saveHistory();
+      redraw();
+    }
+    textMode=false;
+  }
+});
+
+// Combinar capas
+document.getElementById('merge').addEventListener('click', ()=>{
+  if(layers.length<=1) return;
+  const base = layers[0];
+  for(let i=1;i<layers.length;i++){
+    base.ctx.drawImage(layers[i].canvas,0,0);
+  }
+  layers=[base];
+  activeLayer=base;
+  saveHistory();
+  redraw();
+});
+
+// Guardar imagen
+document.getElementById('save').addEventListener('click', ()=>{
+  if(layers.length==0) return;
+  const link = document.createElement('a');
+  link.download = 'imagen_editada.png';
+  link.href = layers[0].canvas.toDataURL();
+  link.click();
+});
+
+// Filtros
+function applyFilters(){
+  if(!activeLayer) return;
+  const brightness = document.getElementById('brightness').value;
+  const contrast = document.getElementById('contrast').value;
+  const saturation = document.getElementById('saturation').value;
+  const filter = document.getElementById('filters').value;
+
+  activeLayer.ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) ${filter !== 'none'?filter+'(100%)':''}`;
+  redraw();
+}
+
+document.getElementById('brightness').addEventListener('input', applyFilters);
+document.getElementById('contrast').addEventListener('input', applyFilters);
+document.getElementById('saturation').addEventListener('input', applyFilters);
+document.getElementById('filters').addEventListener('change', applyFilters);
+
+</script>
+</body>
+</html>
